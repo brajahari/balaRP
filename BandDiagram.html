@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Band Diagram &amp; Carrier Generation</title>
+  <style>
+    :root { --panel:#121826; --text:#e6edf3; --muted:#9aa4b2; --accent:#5cc8ff; --accent2:#7ee787; --band:#ffb454; --hole:#f72585; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#2c3e50; min-height:100vh; padding:20px; box-sizing:border-box; }
+    .page { background:#ffffff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.3); max-width:1400px; margin:0 auto; padding:16px; }
+    .page h1 { font-size:18px; margin:0 0 14px; color:#2c3e50; text-align:left; }
+    .wrap { display:grid; grid-template-columns: 360px 1fr; gap:14px; }
+    @media (max-width: 900px){ .wrap { grid-template-columns: 1fr; } }
+
+    /* Controls card: bright */
+    .card.controls { background:#ffffff; border:1px solid #e0e6ed; border-radius:12px; padding:14px; }
+    .group-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#667eea; margin:14px 0 4px; }
+    .group-title:first-of-type { margin-top:4px; }
+    .ctl { margin:8px 0 12px; }
+    .ctl-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:4px; }
+    label { font-size:12px; color:#6c757d; }
+    input[type=number]{ width:96px; padding:6px 8px; border-radius:10px; border:1px solid #d0d5db; background:#ffffff; color:#2c3e50; box-sizing:border-box; }
+    input[type=number]:focus{ outline:none; border-color:#667eea; box-shadow:0 0 0 3px rgba(102,126,234,0.15); }
+    input[type=range]{ width:100%; accent-color:#667eea; }
+    button { cursor:pointer; border:none; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#ffffff; padding:10px 12px; border-radius:10px; font-weight:600; }
+    button:hover{ filter:brightness(1.1); }
+    .tmark { position:relative; height:26px; margin-top:-2px; }
+    .tmark span { position:absolute; left:calc(30% + 8px - 4.8px); transform:translateX(-50%); font-size:10.5px; font-weight:700; line-height:1.1; text-align:center; color:#667eea; cursor:pointer; user-select:none; }
+    .seg { display:flex; gap:6px; }
+    .seg label { flex:1; margin:0; cursor:pointer; position:relative; }
+    .seg input { position:absolute; opacity:0; pointer-events:none; }
+    .seg span { display:block; text-align:center; padding:8px 6px; border:1px solid #d0d5db; border-radius:10px; font-size:12px; font-weight:600; color:#6c757d; background:#ffffff; }
+    .seg input:checked + span { background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color:transparent; color:#ffffff; }
+    .seg input:focus-visible + span { box-shadow:0 0 0 3px rgba(102,126,234,0.25); }
+    .kpi { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .kpi .box { background:#f0f0f0; border:1px solid #e0e6ed; border-radius:12px; padding:9px; }
+    .kpi .t { color:#6c757d; font-size:10.5px; margin-bottom:4px; }
+    .kpi .v { font-size:13.5px; font-weight:800; color:#2c3e50; }
+
+    /* Plot card: stays dark */
+    .card.plot { background:var(--panel); border:1px solid #1f2a37; border-radius:12px; padding:10px; }
+    canvas { width:100%; height:480px; display:block; border-radius:10px; background:#0a111b; border:1px solid #1f2a37; }
+    .legend { display:flex; flex-wrap:wrap; gap:14px; padding:6px 12px 10px; color:var(--muted); font-size:12px; align-items:center; }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; box-sizing:border-box; }
+    .status { padding:12px 14px 2px; color:var(--muted); font-size:12px; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>Band Diagram &amp; Thermal Carrier Generation</h1>
+
+  <div class="wrap">
+    <section class="card controls">
+      <div class="group-title">Material</div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0.2" max="3" step="0.01" value="1.1" /></div>
+        <input id="Eg" type="range" min="0.2" max="3" step="0.01" value="1.1" />
+      </div>
+      <div class="seg">
+        <label><input type="radio" name="dtype" value="i" checked /><span>Intrinsic</span></label>
+        <label><input type="radio" name="dtype" value="n" /><span>n-type</span></label>
+        <label><input type="radio" name="dtype" value="p" /><span>p-type</span></label>
+      </div>
+      <div class="ctl" id="dopCtl" style="display:none; margin-top:12px;">
+        <div class="ctl-head">
+          <label for="dop" id="dopLabel">Donor concentration N<sub>d</sub></label>
+          <span id="dopVal" style="font-size:12px; font-weight:700; color:#2c3e50;"></span>
+        </div>
+        <input id="dop" type="range" min="13" max="18" step="0.05" value="13" />
+        <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#6c757d;"><span>10<sup>13</sup></span><span id="dopHint"></span><span>10<sup>18</sup> cm<sup>&minus;3</sup></span></div>
+      </div>
+
+      <div class="group-title">Temperature</div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="T">Temperature T (K)</label><input id="TNum" type="number" min="0" max="1000" step="1" value="0" /></div>
+        <input id="T" type="range" min="0" max="1000" step="1" value="0" />
+        <div class="tmark"><span id="t300" title="Room temperature (click to set T = 300 K)">&#9650;<br>300 K</span></div>
+      </div>
+
+      <div class="kpi">
+        <div class="box"><div class="t">kT</div><div class="v" id="kTOut">—</div></div>
+        <div class="box"><div class="t">n<sub>i</sub> (cm<sup>&minus;3</sup>)</div><div class="v" id="niOut">—</div></div>
+        <div class="box"><div class="t">n &nbsp;electrons (cm<sup>&minus;3</sup>)</div><div class="v" id="nOut">—</div></div>
+        <div class="box"><div class="t">p &nbsp;holes (cm<sup>&minus;3</sup>)</div><div class="v" id="pOut">—</div></div>
+      </div>
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:14px; cursor:pointer; user-select:none;">
+        <input id="showRecomb" type="checkbox" style="accent-color:#667eea; margin:0;" /> Recombination (show continuous recombination)
+      </label>
+
+      <div style="margin-top:14px;"><button id="resetBtn">Reset defaults</button></div>
+    </section>
+
+    <section class="card plot">
+      <div class="legend">
+        <span><span class="dot" style="background:#4cc9f0"></span>electron (conduction band)</span>
+        <span><span class="dot" style="border:2px solid var(--hole)"></span>hole (valence band)</span>
+        <span><span class="dot" style="background:var(--band)"></span>E<sub>c</sub> / E<sub>v</sub></span>
+        <span><span class="dot" style="background:var(--accent2)"></span>E<sub>F</sub></span>
+      </div>
+      <canvas id="plot"></canvas>
+      <div class="status">
+        Raising T excites electrons from the valence band across the gap, leaving holes behind (pair generation); lowering T lets pairs recombine (tick "Recombination" to also see it continuously at a fixed T).
+        In n-type and p-type material the extra majority carriers are excited from the dopant level near E<sub>F</sub> (green dashed path) up to E<sub>c</sub> (electrons) or down to E<sub>v</sub> (holes).
+        Particle counts are drawn on a log scale (10<sup>9</sup> to 10<sup>18</sup> cm<sup>&minus;3</sup> maps to 0 to 80 particles) so the growth is visible, and in doped material at least 2 minority carriers are always shown, although the real minority density is many orders of magnitude lower; the exact n, p and n<sub>i</sub> are in the readouts.
+        Model: Boltzmann statistics, dopants 0.05 eV from the band edge (they freeze out at low T; E<sub>F</sub> itself uses the full-ionization approximation), N<sub>c</sub> = N<sub>v</sub> = 10<sup>19</sup>(T/300)<sup>1.5</sup> cm<sup>&minus;3</sup>.
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  const K_B = 8.617333262e-5; // eV/K
+  const DEFAULTS = { Eg: 1.1, T: 0, type: 'i', logN: 13 }; // logN = log10 of the donor/acceptor concentration (cm^-3)
+  const E_B = 0.05;          // eV: dopant binding energy (Ec - Ed for donors, Ea - Ev for acceptors)
+  const state = { ...DEFAULTS };
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // Fermi level from charge neutrality (same model as FermiDirac.html)
+  const K300 = K_B * 300;
+  const N0 = 1e19; // cm^-3 at 300 K
+  function fermiLevel(Eg, T, type, Nd){
+    if (type === 'i') return { Ef: Eg / 2, Nd: null };
+    const lnNd = Math.log(Nd);
+    if (T <= 0) return { Ef: type === 'n' ? Eg : 0, Nd };
+    const kT = K_B * T;
+    const lnN = Math.log(N0) + 1.5 * Math.log(T / 300);
+    const lnx = lnNd - Math.log(2) - (lnN - Eg / (2 * kT));
+    const a = lnx > 30 ? lnx + Math.log(2) : Math.asinh(Math.exp(lnx));
+    return { Ef: clamp(Eg / 2 + (type === 'n' ? 1 : -1) * kT * a, 0, Eg), Nd };
+  }
+
+  // ---- derived quantities -------------------------------------------------
+  const MAXN = 80;
+  const toCount = (x) => x <= 0 ? 0 : Math.round(MAXN * clamp((Math.log10(x) - 9) / 9, 0, 1));
+  let P = {};
+
+  function compute(){
+    const Eg = clamp(state.Eg, 0.05, 6);
+    const T = Math.max(0, state.T);
+    const kT = K_B * T;
+    const { Ef, Nd } = fermiLevel(Eg, T, state.type, Math.pow(10, state.logN));
+    const ni = T > 0 ? Math.exp(Math.log(N0) + 1.5 * Math.log(T / 300) - Eg / (2 * kT)) : 0;
+    let n = ni, p = ni;
+    if (state.type !== 'i'){
+      // dopants ionize with binding energy E_B: ionized fraction 1/(1 + 2 exp((E_F - E_d)/kT)) for donors (mirrored for acceptors)
+      const Ed = state.type === 'n' ? Eg - E_B : E_B;
+      const arg = (state.type === 'n' ? Ef - Ed : Ed - Ef) / Math.max(kT, 1e-9);
+      const D = T > 0 ? Nd / (1 + 2 * Math.exp(clamp(arg, -700, 700))) : 0;
+      const maj = (D + Math.sqrt(D * D + 4 * ni * ni)) / 2;
+      const min = maj > 0 ? ni * ni / maj : 0;
+      if (state.type === 'n'){ n = maj; p = min; } else { p = maj; n = min; }
+    }
+    let nE = toCount(n), nH = toCount(p);
+    // doped: always keep a couple of minority carriers visible (thermal pair generation never stops); not to scale
+    if (state.type === 'n' && T > 0 && nE > 0) nH = Math.max(2, nH);
+    if (state.type === 'p' && T > 0 && nH > 0) nE = Math.max(2, nE);
+    P = { Eg, T, kT, Ef, Nd, ni, n, p, nE, nH };
+  }
+
+  const sci = (x) => {
+    if (!isFinite(x) || x < 1) return '0';
+    const [m, e] = x.toExponential(1).split('e');
+    return m + '&times;10<sup>' + parseInt(e, 10) + '</sup>';
+  };
+
+  function updateUI(){
+    $('kTOut').textContent = (P.kT * 1000).toFixed(2) + ' meV';
+    $('niOut').innerHTML = sci(P.ni);
+    $('nOut').innerHTML = sci(P.n);
+    $('pOut').innerHTML = sci(P.p);
+    const doped = state.type !== 'i';
+    $('dopCtl').style.display = doped ? 'block' : 'none';
+    if (doped){
+      const n = state.type === 'n';
+      $('dopLabel').innerHTML = n ? 'Donor concentration N<sub>d</sub>' : 'Acceptor concentration N<sub>a</sub>';
+      $('dopVal').innerHTML = sci(P.Nd) + ' cm<sup>&minus;3</sup>';
+      $('dopHint').innerHTML = n ? '&uarr; E<sub>F</sub> rises' : '&darr; E<sub>F</sub> falls';
+    }
+  }
+
+  function changed(){ compute(); updateUI(); }
+
+  function bind(key, rid, nid){
+    const r = $(rid), n = $(nid);
+    r.addEventListener('input', () => { state[key] = parseFloat(r.value); n.value = r.value; changed(); });
+    n.addEventListener('input', () => {
+      const v = parseFloat(n.value);
+      if (!isFinite(v)) return;
+      state[key] = v; r.value = v; changed();
+    });
+  }
+
+  // ---- particles ------------------------------------------------------------
+  // state: live | spawn (electron jumping up) | fadein | fadeout | recomb
+  let parts = [];
+  let flashes = [];
+  let ctx = null, W = 0, H = 0;
+  let turnTimer = 0.5;
+  const pad = { l: 64, r: 88, t: 16, b: 34 };
+  const xMin = () => pad.l + 14;
+  const xMax = () => pad.l + (W - pad.l - pad.r) - 14;
+
+  function mk(kind, x, st, dur){
+    return { kind, x, vx: rnd(-40, 40), tt: rnd(0.3, 1.5), u: rnd(0.03, 1), ph: rnd(0, 6.28), state: st, t: 0, dur: dur || 0 };
+  }
+  const offOf = (p) => 0.03 + Math.min(0.42, -Math.max(P.kT, 0.006) * Math.log(p.u));
+  const liveE = (p) => p.kind === 'e' ? P.Eg + offOf(p) : -offOf(p);
+
+  function populate(){
+    parts = []; flashes = [];
+    for (let i = 0; i < P.nE; i++) parts.push(mk('e', rnd(xMin(), xMax()), 'live'));
+    for (let i = 0; i < P.nH; i++) parts.push(mk('h', rnd(xMin(), xMax()), 'live'));
+  }
+
+  function spawnPair(){
+    const x = rnd(xMin(), xMax());
+    parts.push(mk('e', x, 'spawn', 0.9));
+    parts.push(mk('h', x, 'fadein', 0.6));
+    flashes.push({ x, E: 0, t: 0, col: '255,209,102' });
+  }
+  const isMajority = (kind) => (state.type === 'n' && kind === 'e') || (state.type === 'p' && kind === 'h');
+  // Doped material: extra majority carriers come from the dopant level (near EF) instead of across the gap
+  function spawnSingle(kind){
+    const x = rnd(xMin(), xMax());
+    if (!isMajority(kind)){ parts.push(mk(kind, x, 'fadein', 0.6)); return; }
+    const p = mk(kind, x, 'spawn', 0.9);
+    p.fromEf = true;
+    parts.push(p);
+    flashes.push({ x, ef: true, E: 0, t: 0, col: '126,231,135' });
+  }
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  function recombinePair(){
+    const e = pick(parts.filter((p) => p.kind === 'e' && p.state === 'live'));
+    const h = pick(parts.filter((p) => p.kind === 'h' && p.state === 'live'));
+    if (!e || !h) return;
+    e.state = h.state = 'recomb';
+    e.t = h.t = 0;
+    e.dur = h.dur = 0.9;
+    e.x0 = e.x; e.E0 = liveE(e); e.x1 = h.x;
+    h.x0 = h.x; h.E0 = liveE(h); h.x1 = h.x;
+  }
+  function fadeOutOne(kind){
+    const p = pick(parts.filter((q) => q.kind === kind && q.state === 'live'));
+    if (!p) return;
+    p.t = 0;
+    if (!isMajority(kind)){ p.state = 'fadeout'; p.dur = 0.5; }
+    else { p.state = 'return'; p.dur = 0.8; p.E0 = liveE(p); } // falls back to the dopant level near EF
+  }
+
+  function step(dt){
+    const active = (k) => parts.filter((p) => p.kind === k && p.state !== 'recomb' && p.state !== 'fadeout' && p.state !== 'return').length;
+    const nE = active('e'), nH = active('h');
+    let addE = P.nE - nE, addH = P.nH - nH;
+    const add = Math.max(0, Math.min(addE, addH));
+    for (let i = 0; i < add; i++) spawnPair();
+    for (let i = 0; i < addE - add; i++) if (addE > 0) spawnSingle('e');
+    for (let i = 0; i < addH - add; i++) if (addH > 0) spawnSingle('h');
+
+    let dE = -addE, dH = -addH;
+    const rp = Math.max(0, Math.min(dE, dH));
+    for (let i = 0; i < rp; i++) recombinePair();
+    for (let i = 0; i < dE - rp; i++) if (dE > 0) fadeOutOne('e');
+    for (let i = 0; i < dH - rp; i++) if (dH > 0) fadeOutOne('h');
+
+    // optional steady-state turnover: a pair recombines, the deficit is refilled by a new generation event
+    turnTimer -= dt;
+    if (turnTimer <= 0){
+      turnTimer = 0.6 / Math.max(0.5, Math.min(P.nE, P.nH) / 8);
+      if ($('showRecomb').checked && Math.min(P.nE, P.nH) >= 2) recombinePair();
+    }
+
+    for (const p of parts){
+      p.t += dt;
+      if (p.state === 'live'){
+        p.x += p.vx * dt;
+        if (p.x < xMin()){ p.x = xMin(); p.vx = Math.abs(p.vx); }
+        if (p.x > xMax()){ p.x = xMax(); p.vx = -Math.abs(p.vx); }
+        p.tt -= dt;
+        if (p.tt <= 0){ p.vx = rnd(-45, 45); p.tt = rnd(0.4, 1.6); }
+      } else if (p.state === 'spawn' || p.state === 'fadein'){
+        if (p.t >= p.dur) p.state = 'live';
+      } else if (p.state === 'recomb'){
+        if (p.t >= p.dur){
+          p.dead = true;
+          if (p.kind === 'e') flashes.push({ x: p.x1, E: 0, t: 0, col: '247,37,133' });
+        }
+      } else if (p.state === 'fadeout'){
+        if (p.t >= p.dur) p.dead = true;
+      } else if (p.state === 'return'){
+        if (p.t >= p.dur){
+          p.dead = true;
+          flashes.push({ x: p.x, ef: true, E: 0, t: 0, col: '126,231,135' });
+        }
+      }
+    }
+    parts = parts.filter((p) => !p.dead);
+    for (const f of flashes) f.t += dt;
+    flashes = flashes.filter((f) => f.t < 0.5);
+  }
+
+  // position of a particle in (px x, energy, alpha)
+  function posOf(p){
+    const s = p.dur ? clamp(p.t / p.dur, 0, 1) : 1;
+    switch (p.state){
+      case 'spawn': {
+        const E0 = p.fromEf ? P.Ef : 0;
+        return { x: p.x, E: E0 + (liveE(p) - E0) * (1 - Math.pow(1 - s, 3)), a: 1, s };
+      }
+      case 'return': return { x: p.x, E: p.E0 + (P.Ef - p.E0) * s * s, a: s < 0.75 ? 1 : (1 - s) / 0.25, s };
+      case 'fadein': return { x: p.x, E: liveE(p), a: s, s };
+      case 'fadeout': return { x: p.x, E: liveE(p), a: 1 - s, s };
+      case 'recomb': {
+        const q = s * s;
+        return { x: p.kind === 'e' ? p.x0 + (p.x1 - p.x0) * q : p.x0, E: p.E0 * (1 - q), a: 1, s };
+      }
+      default: return { x: p.x, E: liveE(p), a: 1, s };
+    }
+  }
+
+  // ---- drawing --------------------------------------------------------------
+  function resize(){
+    const canvas = $('plot');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    W = rect.width; H = rect.height;
+  }
+
+  function carrier(x, y, kind, alpha){
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(x, y, 6.5, 0, Math.PI * 2);
+    if (kind === 'e'){
+      ctx.fillStyle = '#4cc9f0'; ctx.fill();
+      ctx.strokeStyle = '#0a111b'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#06202b';
+    } else {
+      ctx.fillStyle = 'rgba(247,37,133,0.22)'; ctx.fill();
+      ctx.strokeStyle = '#f72585'; ctx.lineWidth = 1.7; ctx.stroke();
+      ctx.fillStyle = '#f72585';
+    }
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(kind === 'e' ? '−' : '+', x, y + 0.5);
+    ctx.restore();
+  }
+
+  function draw(time){
+    if (!ctx || !W || !H) return;
+    const { Eg, Ef } = P;
+    const Ec = Eg, Ev = 0, ylo = -0.5, yhi = Eg + 0.5;
+    const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    const Y = (e) => pad.t + (yhi - e) / (yhi - ylo) * ph;
+    const font = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.clearRect(0, 0, W, H);
+
+    // bands
+    ctx.fillStyle = 'rgba(102,126,234,0.14)';
+    ctx.fillRect(pad.l, Y(yhi), pw, Y(Ec) - Y(yhi));
+    ctx.fillRect(pad.l, Y(Ev), pw, Y(ylo) - Y(Ev));
+
+    // energy grid + labels
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#9aa4b2';
+    ctx.font = '12px ' + font;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const step = (yhi - ylo) > 3 ? 0.5 : 0.2;
+    for (let k = Math.ceil(ylo / step); k <= Math.floor(yhi / step); k++){
+      const e = k * step, y = Y(e);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+      ctx.fillText(e.toFixed(1), pad.l - 8, y);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + ph); ctx.stroke();
+
+    // band labels
+    ctx.font = '12px ' + font;
+    ctx.fillStyle = 'rgba(169,183,208,0.85)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Conduction band', pad.l + pw - 8, Y(yhi) + 8);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Valence band', pad.l + 8, Y(ylo) - 8);
+
+    // Ec and Ev
+    ctx.strokeStyle = '#ffb454';
+    ctx.fillStyle = '#ffb454';
+    ctx.lineWidth = 2;
+    ctx.font = 'bold 12px ' + font;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (const [name, e] of [['Ec', Ec], ['Ev', Ev]]){
+      ctx.beginPath(); ctx.moveTo(pad.l, Y(e)); ctx.lineTo(pad.l + pw, Y(e)); ctx.stroke();
+      ctx.fillText(name + ' = ' + e.toFixed(2), pad.l + pw + 8, Y(e));
+    }
+
+    // Fermi level
+    ctx.strokeStyle = '#7ee787';
+    ctx.fillStyle = '#7ee787';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([7, 4]);
+    ctx.beginPath(); ctx.moveTo(pad.l, Y(Ef)); ctx.lineTo(pad.l + pw, Y(Ef)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillText('EF = ' + Ef.toFixed(2), pad.l + pw + 8, Y(Ef));
+
+    // generation lines, carriers, flashes
+    for (const p of parts){
+      const q = posOf(p);
+      if (p.state === 'spawn' || p.state === 'return'){
+        const from = p.state === 'return' ? p.E0 : (p.fromEf ? P.Ef : 0);
+        const fade = p.state === 'spawn' ? 1 - q.s : 0.5 * q.a;
+        ctx.strokeStyle = (p.fromEf || p.state === 'return' ? 'rgba(126,231,135,' : 'rgba(255,209,102,') + (0.85 * fade) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(q.x, Y(from)); ctx.lineTo(q.x, Y(q.E)); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    for (const p of parts){
+      const q = posOf(p);
+      const wob = p.state === 'live' ? Math.sin(time * 2.2 + p.ph) * 2.5 : 0;
+      carrier(q.x, Y(q.E) + wob, p.kind, q.a);
+    }
+    for (const f of flashes){
+      const s = f.t / 0.5;
+      ctx.strokeStyle = 'rgba(' + f.col + ',' + (1 - s) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(f.x, Y(f.ef ? P.Ef : f.E), 5 + 16 * s, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // axis titles
+    ctx.fillStyle = 'rgba(231,238,252,0.95)';
+    ctx.font = '13px ' + font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Position, x (arbitrary)', pad.l + pw / 2, H - 6);
+    ctx.save();
+    ctx.translate(16, pad.t + ph / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textBaseline = 'top';
+    ctx.fillText('Energy, E (eV)', 0, 0);
+    ctx.restore();
+  }
+
+  let last = performance.now();
+  function frame(now){
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    step(dt);
+    draw(now / 1000);
+    requestAnimationFrame(frame);
+  }
+
+  // ---- wiring ---------------------------------------------------------------
+  bind('Eg', 'Eg', 'EgNum');
+  bind('T', 'T', 'TNum');
+  $('t300').addEventListener('click', () => { state.T = 300; $('T').value = $('TNum').value = 300; changed(); });
+  $('dop').addEventListener('input', () => { state.logN = parseFloat($('dop').value); changed(); });
+  document.querySelectorAll('input[name="dtype"]').forEach((r) => {
+    r.addEventListener('change', () => { state.type = r.value; changed(); });
+  });
+  $('resetBtn').addEventListener('click', () => {
+    Object.assign(state, DEFAULTS);
+    document.querySelector('input[name="dtype"][value="i"]').checked = true;
+    $('showRecomb').checked = false;
+    $('dop').value = state.logN;
+    for (const [key, nid] of [['Eg', 'EgNum'], ['T', 'TNum']]){
+      $(key).value = $(nid).value = state[key];
+    }
+    changed();
+  });
+  window.addEventListener('resize', resize);
+
+  changed();
+  resize();
+  populate();
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
