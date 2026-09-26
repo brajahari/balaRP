@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fermi-Dirac Distribution</title>
+  <style>
+    :root { --panel:#121826; --text:#e6edf3; --muted:#9aa4b2; --accent:#5cc8ff; --accent2:#7ee787; --band:#ffb454; --probe:#ffd166; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#2c3e50; min-height:100vh; padding:20px; box-sizing:border-box; }
+    .page { background:#ffffff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.3); max-width:1400px; margin:0 auto; padding:16px; }
+    .page h1 { font-size:18px; margin:0 0 14px; color:#2c3e50; text-align:left; }
+    .wrap { display:grid; grid-template-columns: 360px 1fr; gap:14px; }
+    @media (max-width: 900px){ .wrap { grid-template-columns: 1fr; } }
+
+    /* Controls card: bright */
+    .card.controls { background:#ffffff; border:1px solid #e0e6ed; border-radius:12px; padding:14px; }
+    .group-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#667eea; margin:14px 0 4px; }
+    .group-title:first-of-type { margin-top:4px; }
+    .ctl { margin:8px 0 12px; }
+    .ctl-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:4px; }
+    label { font-size:12px; color:#6c757d; }
+    input[type=number]{ width:96px; padding:6px 8px; border-radius:10px; border:1px solid #d0d5db; background:#ffffff; color:#2c3e50; box-sizing:border-box; }
+    input[type=number]:focus{ outline:none; border-color:#667eea; box-shadow:0 0 0 3px rgba(102,126,234,0.15); }
+    input[type=range]{ width:100%; accent-color:#667eea; }
+    button { cursor:pointer; border:none; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#ffffff; padding:10px 12px; border-radius:10px; font-weight:600; }
+    button:hover{ filter:brightness(1.1); }
+    .seg { display:flex; gap:6px; }
+    .seg label { flex:1; margin:0; cursor:pointer; position:relative; }
+    .seg input { position:absolute; opacity:0; pointer-events:none; }
+    .seg span { display:block; text-align:center; padding:8px 6px; border:1px solid #d0d5db; border-radius:10px; font-size:12px; font-weight:600; color:#6c757d; background:#ffffff; }
+    .seg input:checked + span { background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color:transparent; color:#ffffff; }
+    .seg input:focus-visible + span { box-shadow:0 0 0 3px rgba(102,126,234,0.25); }
+    .kpi { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .kpi .box { background:#f0f0f0; border:1px solid #e0e6ed; border-radius:12px; padding:9px; }
+    .kpi .t { color:#6c757d; font-size:10.5px; margin-bottom:4px; }
+    .kpi .v { font-size:13.5px; font-weight:800; color:#2c3e50; }
+
+    /* Plot card: stays dark */
+    .card.plot { background:var(--panel); border:1px solid #1f2a37; border-radius:12px; padding:10px; }
+    canvas { width:100%; height:460px; display:block; border-radius:10px; background:#0a111b; border:1px solid #1f2a37; }
+    .legend { display:flex; flex-wrap:wrap; gap:14px; padding:6px 12px 10px; color:var(--muted); font-size:12px; }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .status { padding:12px 14px 2px; color:var(--muted); font-size:12px; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>Fermi-Dirac Distribution f(E)</h1>
+
+  <div class="wrap">
+    <section class="card controls">
+      <div class="group-title">Material</div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0.2" max="3" step="0.01" value="1.12" /></div>
+        <input id="Eg" type="range" min="0.2" max="3" step="0.01" value="1.12" />
+      </div>
+      <div class="seg">
+        <label><input type="radio" name="dtype" value="i" checked /><span>Intrinsic</span></label>
+        <label><input type="radio" name="dtype" value="n" /><span>n-type</span></label>
+        <label><input type="radio" name="dtype" value="p" /><span>p-type</span></label>
+      </div>
+      <div id="EfNote" style="font-size:12px; color:#6c757d; margin-top:8px;">—</div>
+
+      <div class="group-title">Fermi function</div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="T">Temperature T (K)</label><input id="TNum" type="number" min="0" max="1000" step="1" value="300" /></div>
+        <input id="T" type="range" min="0" max="1000" step="1" value="300" />
+      </div>
+
+      <div class="group-title">Probe energy</div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="E">Energy E (eV)</label><input id="ENum" type="number" min="-0.6" max="1.72" step="0.005" value="0.7" /></div>
+        <input id="E" type="range" min="-0.6" max="1.72" step="0.005" value="0.7" />
+      </div>
+
+      <div class="kpi">
+        <div class="box"><div class="t">kT</div><div class="v" id="kTOut">—</div></div>
+        <div class="box"><div class="t">f(E) at probe</div><div class="v" id="fOut">—</div></div>
+        <div class="box"><div class="t">f(E<sub>c</sub>) &nbsp;electron occupancy</div><div class="v" id="fcOut">—</div></div>
+        <div class="box"><div class="t">1 &minus; f(E<sub>v</sub>) &nbsp;hole occupancy</div><div class="v" id="hvOut">—</div></div>
+      </div>
+
+      <div style="margin-top:14px;"><button id="resetBtn">Reset defaults</button></div>
+    </section>
+
+    <section class="card plot">
+      <div class="legend">
+        <span><span class="dot" style="background:var(--accent)"></span>f(E)</span>
+        <span><span class="dot" style="background:var(--accent2)"></span>E<sub>F</sub></span>
+        <span><span class="dot" style="background:var(--band)"></span>E<sub>c</sub> / E<sub>v</sub></span>
+        <span><span class="dot" style="background:var(--probe)"></span>probe E</span>
+      </div>
+      <canvas id="plot"></canvas>
+      <div class="status">
+        f(E) = 1 / (1 + e<sup>(E &minus; E<sub>F</sub>) / kT</sup>) &nbsp;|&nbsp; k = 8.617&times;10<sup>&minus;5</sup> eV/K &nbsp;|&nbsp; E<sub>v</sub> is taken as 0 eV, so E<sub>c</sub> = E<sub>g</sub>.
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  const K_B = 8.617333262e-5; // eV/K
+  const DEFAULTS = { Eg: 1.12, T: 300, E: 0.7, type: 'i' };
+  const DOPING_OFFSET = 0.2; // eV: EF sits this far below Ec (n-type) or above Ev (p-type)
+  const state = { ...DEFAULTS };
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function fermi(E, Ef, T){
+    if (T <= 0) return E < Ef ? 1 : (E > Ef ? 0 : 0.5);
+    const x = (E - Ef) / (K_B * T);
+    if (x > 700) return 0;
+    if (x < -700) return 1;
+    return 1 / (1 + Math.exp(x));
+  }
+  // 1 - f(E) == f(2*Ef - E); computed this way it stays accurate when f is close to 1
+  const holeProb = (E, Ef, T) => fermi(2 * Ef - E, Ef, T);
+
+  function fp(v){
+    if (!isFinite(v)) return '—';
+    if (v === 0) return '0';
+    if (v < 1e-3) return v.toExponential(2);
+    return v.toFixed(4);
+  }
+
+  function params(){
+    const Eg = clamp(state.Eg, 0.05, 6);
+    const Ef = state.type === 'n' ? Eg - DOPING_OFFSET : state.type === 'p' ? DOPING_OFFSET : Eg / 2;
+    return { Eg, Ef, T: Math.max(0, state.T), E: state.E };
+  }
+
+  function setBounds(){
+    const Eg = params().Eg;
+    const specs = [['E', 'ENum', -0.6, Eg + 0.6]];
+    for (const [key, nid, lo, hi] of specs){
+      const r = $(key), n = $(nid);
+      r.min = n.min = lo;
+      r.max = n.max = hi;
+      state[key] = clamp(state[key], lo, hi);
+      r.value = n.value = state[key];
+    }
+  }
+
+  function bind(key, rid, nid, afterChange){
+    const r = $(rid), n = $(nid);
+    r.addEventListener('input', () => {
+      state[key] = parseFloat(r.value);
+      n.value = r.value;
+      if (afterChange) afterChange();
+      update();
+    });
+    n.addEventListener('input', () => {
+      const v = parseFloat(n.value);
+      if (!isFinite(v)) return;
+      state[key] = v;
+      r.value = v;
+      if (afterChange) afterChange();
+      update();
+    });
+  }
+
+  function setupCanvas(canvas){
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w: rect.width, h: rect.height };
+  }
+
+  function draw(){
+    const { Eg, Ef, T, E } = params();
+    const { ctx, w, h } = setupCanvas($('plot'));
+    if (!w || !h) return;
+    ctx.clearRect(0, 0, w, h);
+
+    const Ec = Eg, Ev = 0;
+    const ylo = -0.6, yhi = Eg + 0.6;
+    const pad = { l: 64, r: 88, t: 16, b: 48 };
+    const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+    const X = (f) => pad.l + f * pw;
+    const Y = (e) => pad.t + (yhi - e) / (yhi - ylo) * ph;
+    const font = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+
+    // bands
+    ctx.fillStyle = 'rgba(102,126,234,0.14)';
+    ctx.fillRect(pad.l, Y(yhi), pw, Y(Ec) - Y(yhi));
+    ctx.fillRect(pad.l, Y(Ev), pw, Y(ylo) - Y(Ev));
+
+    // grid + tick labels
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#9aa4b2';
+    ctx.font = '12px ' + font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (let i = 0; i <= 4; i++){
+      const f = i / 4, x = X(f);
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke();
+      ctx.fillText(f.toFixed(2), x, pad.t + ph + 6);
+    }
+    const step = (yhi - ylo) > 3 ? 0.5 : 0.2;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let k = Math.ceil(ylo / step); k <= Math.floor(yhi / step); k++){
+      const e = k * step, y = Y(e);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+      ctx.fillText(e.toFixed(1), pad.l - 8, y);
+    }
+
+    // axes
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + ph); ctx.lineTo(pad.l + pw, pad.t + ph);
+    ctx.stroke();
+
+    // band labels
+    ctx.font = '12px ' + font;
+    ctx.fillStyle = 'rgba(169,183,208,0.85)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Conduction band', pad.l + pw - 8, Y(yhi) + 8);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Valence band', pad.l + 8, Y(ylo) - 8);
+
+    // Ec and Ev
+    ctx.strokeStyle = '#ffb454';
+    ctx.fillStyle = '#ffb454';
+    ctx.lineWidth = 1.6;
+    ctx.font = 'bold 12px ' + font;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (const [name, e] of [['Ec', Ec], ['Ev', Ev]]){
+      ctx.beginPath(); ctx.moveTo(pad.l, Y(e)); ctx.lineTo(pad.l + pw, Y(e)); ctx.stroke();
+      ctx.fillText(name + ' = ' + e.toFixed(2), pad.l + pw + 8, Y(e));
+    }
+
+    // f = 0.5 guide
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(X(0.5), pad.t); ctx.lineTo(X(0.5), pad.t + ph); ctx.stroke();
+
+    // Fermi level
+    if (Ef >= ylo && Ef <= yhi){
+      ctx.strokeStyle = '#7ee787';
+      ctx.fillStyle = '#7ee787';
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([7, 4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, Y(Ef)); ctx.lineTo(pad.l + pw, Y(Ef)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = 'bold 12px ' + font;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('EF = ' + Ef.toFixed(2), pad.l + pw + 8, Y(Ef));
+    }
+    ctx.setLineDash([]);
+
+    // f(E) curve
+    ctx.strokeStyle = '#5cc8ff';
+    ctx.lineWidth = 2.6;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (T <= 0){
+      ctx.moveTo(X(1), Y(ylo));
+      if (Ef >= ylo && Ef <= yhi){ ctx.lineTo(X(1), Y(Ef)); ctx.lineTo(X(0), Y(Ef)); }
+      else ctx.lineTo(X(Ef < ylo ? 0 : 1), Y(yhi));
+      ctx.lineTo(X(0), Y(yhi));
+    } else {
+      const es = [];
+      const N = 500;
+      for (let i = 0; i <= N; i++) es.push(ylo + (yhi - ylo) * i / N);
+      const kT = K_B * T;
+      for (let i = -100; i <= 100; i++){
+        const e = Ef + kT * i / 10;
+        if (e >= ylo && e <= yhi) es.push(e);
+      }
+      es.sort((a, b) => a - b);
+      es.forEach((e, i) => {
+        const x = X(fermi(e, Ef, T)), y = Y(e);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+    }
+    ctx.stroke();
+
+    // probe
+    if (E >= ylo && E <= yhi){
+      const f = fermi(E, Ef, T);
+      const px = X(f), py = Y(E);
+      ctx.strokeStyle = 'rgba(255,209,102,0.7)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, pad.t + ph); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ffd166';
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      const label = 'f(E) = ' + fp(f);
+      ctx.font = 'bold 12px ' + font;
+      const right = px > pad.l + pw * 0.55;
+      ctx.textAlign = right ? 'right' : 'left';
+      ctx.textBaseline = py - 10 < pad.t + 8 ? 'top' : 'bottom';
+      ctx.fillText(label, right ? px - 10 : px + 10, ctx.textBaseline === 'top' ? py + 10 : py - 10);
+    }
+
+    // axis titles
+    ctx.fillStyle = 'rgba(231,238,252,0.95)';
+    ctx.font = '13px ' + font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('f(E)  (probability of occupancy)', pad.l + pw / 2, h - 6);
+    ctx.save();
+    ctx.translate(16, pad.t + ph / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textBaseline = 'top';
+    ctx.fillText('Energy, E (eV)', 0, 0);
+    ctx.restore();
+  }
+
+  function update(){
+    const { Eg, Ef, T, E } = params();
+    const notes = {
+      i: 'Intrinsic: E<sub>F</sub> = E<sub>g</sub>/2 (midgap)',
+      n: 'n-type: E<sub>F</sub> = E<sub>c</sub> &minus; ' + DOPING_OFFSET,
+      p: 'p-type: E<sub>F</sub> = E<sub>v</sub> + ' + DOPING_OFFSET
+    };
+    $('EfNote').innerHTML = notes[state.type] + ' = ' + Ef.toFixed(3) + ' eV';
+    $('kTOut').textContent = (K_B * T * 1000).toFixed(2) + ' meV';
+    $('fOut').textContent = fp(fermi(E, Ef, T));
+    $('fcOut').textContent = fp(fermi(Eg, Ef, T));
+    $('hvOut').textContent = fp(holeProb(0, Ef, T));
+    draw();
+  }
+
+  bind('Eg', 'Eg', 'EgNum', setBounds);
+  bind('T', 'T', 'TNum');
+  bind('E', 'E', 'ENum');
+
+  document.querySelectorAll('input[name="dtype"]').forEach((r) => {
+    r.addEventListener('change', () => { state.type = r.value; update(); });
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    Object.assign(state, DEFAULTS);
+    document.querySelector('input[name="dtype"][value="i"]').checked = true;
+    for (const [key, nid] of [['Eg', 'EgNum'], ['T', 'TNum']]){
+      $(key).value = $(nid).value = state[key];
+    }
+    setBounds();
+    update();
+  });
+
+  window.addEventListener('resize', update);
+  setBounds();
+  update();
+</script>
+</body>
+</html>
