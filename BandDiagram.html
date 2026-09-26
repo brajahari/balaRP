@@ -53,16 +53,15 @@
     <section class="card controls">
       <div class="group-title">Temperature</div>
       <div class="ctl">
-        <div class="ctl-head"><label for="T">Temperature T (K)</label><input id="TNum" type="number" min="0" max="1000" step="1" value="0" /></div>
-        <input id="T" type="range" min="0" max="1000" step="1" value="0" />
+        <div class="ctl-head"><label for="T">Temperature T (K)</label><input id="TNum" type="number" min="0" max="1000" step="1" value="300" /></div>
+        <input id="T" type="range" min="0" max="1000" step="1" value="300" />
         <div class="tmark"><span id="t300" title="Room temperature (click to set T = 300 K)">&#9650;<br>300 K</span></div>
       </div>
 
       <div class="group-title">Material</div>
       <div class="ctl">
-        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0.2" max="3" step="0.01" value="1.1" /></div>
-        <input id="Eg" type="range" min="0.2" max="3" step="0.01" value="1.1" />
-      </div>
+        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0" max="5" step="0.01" value="1.1" /></div>
+        <input id="Eg" type="range" min="0" max="5" step="0.01" value="1.1" />      </div>
       <div class="seg">
         <label><input type="radio" name="dtype" value="i" checked /><span>Intrinsic</span></label>
         <label><input type="radio" name="dtype" value="n" /><span>n-type</span></label>
@@ -88,6 +87,10 @@
         <input id="showRecomb" type="checkbox" style="accent-color:#667eea; margin:0;" /> Recombination (show continuous recombination)
       </label>
 
+      <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer; user-select:none;">
+        <input id="showEf" type="checkbox" style="accent-color:#667eea; margin:0;" /> Show Fermi level
+      </label>
+
       <div style="margin-top:14px;"><button id="resetBtn">Reset defaults</button></div>
     </section>
 
@@ -96,14 +99,12 @@
         <span><span class="dot" style="background:#4cc9f0"></span>electron (conduction band)</span>
         <span><span class="dot" style="border:2px solid var(--hole)"></span>hole (valence band)</span>
         <span><span class="dot" style="background:var(--band)"></span>E<sub>c</sub> / E<sub>v</sub></span>
-        <span><span class="dot" style="background:var(--accent2)"></span>E<sub>F</sub></span>
+        <span id="legEf" style="display:none;"><span class="dot" style="background:var(--accent2)"></span>E<sub>F</sub></span>
+        <span id="legDop" style="display:none;"><span class="dot" style="background:#c792ea"></span><span id="legDopText"></span></span>
       </div>
       <canvas id="plot"></canvas>
       <div class="status">
-        Raising T excites electrons from the valence band across the gap, leaving holes behind (pair generation); lowering T lets pairs recombine (tick "Recombination" to also see it continuously at a fixed T).
-        In n-type and p-type material the extra majority carriers are excited from the dopant level near E<sub>F</sub> (green dashed path) up to E<sub>c</sub> (electrons) or down to E<sub>v</sub> (holes).
-        Particle counts are drawn on a log scale (10<sup>9</sup> to 10<sup>18</sup> cm<sup>&minus;3</sup> maps to 0 to 80 particles) so the growth is visible, and in doped material at least 2 minority carriers are always shown, although the real minority density is many orders of magnitude lower; the exact n, p and n<sub>i</sub> are in the readouts.
-        Model: Boltzmann statistics, dopants 0.05 eV from the band edge (they freeze out at low T; E<sub>F</sub> itself uses the full-ionization approximation), N<sub>c</sub> = N<sub>v</sub> = 10<sup>19</sup>(T/300)<sup>1.5</sup> cm<sup>&minus;3</sup>.
+        Note: the number of electrons and holes shown is not to scale (see the readouts for the actual values).
       </div>
     </section>
   </div>
@@ -111,7 +112,7 @@
 
 <script>
   const K_B = 8.617333262e-5; // eV/K
-  const DEFAULTS = { Eg: 1.1, T: 0, type: 'i', logN: 13 }; // logN = log10 of the donor/acceptor concentration (cm^-3)
+  const DEFAULTS = { Eg: 1.1, T: 300, type: 'i', logN: 13 }; // logN = log10 of the donor/acceptor concentration (cm^-3)
   const E_B = 0.05;          // eV: dopant binding energy (Ec - Ed for donors, Ea - Ev for acceptors)
   const state = { ...DEFAULTS };
   const $ = (id) => document.getElementById(id);
@@ -135,10 +136,17 @@
   // ---- derived quantities -------------------------------------------------
   const MAXN = 80;
   const toCount = (x) => x <= 0 ? 0 : Math.round(MAXN * clamp((Math.log10(x) - 9) / 9, 0, 1));
+  // doped material: same counts as before up to 1e13 cm^-3 (36 particles), then a steeper rise (15 per decade, up to 110)
+  const dopCount = (x) => {
+    if (x <= 0) return 0;
+    const L = Math.log10(x);
+    if (L <= 13) return toCount(x);
+    return Math.min(110, Math.round(toCount(1e13) + 15 * (L - 13)));
+  };
   let P = {};
 
   function compute(){
-    const Eg = clamp(state.Eg, 0.05, 6);
+    const Eg = clamp(state.Eg, 0, 5);
     const T = Math.max(0, state.T);
     const kT = K_B * T;
     const { Ef, Nd } = fermiLevel(Eg, T, state.type, Math.pow(10, state.logN));
@@ -153,12 +161,25 @@
       const min = maj > 0 ? ni * ni / maj : 0;
       if (state.type === 'n'){ n = maj; p = min; } else { p = maj; n = min; }
     }
-    let nE = toCount(n), nH = toCount(p);
-    // intrinsic: start showing one pair from 250 K
-    if (state.type === 'i' && T >= 250){ nE = Math.max(1, nE); nH = Math.max(1, nH); }
-    // doped: always keep a couple of minority carriers visible (thermal pair generation never stops); not to scale
-    if (state.type === 'n' && T > 0 && nE > 0) nH = Math.max(2, nH);
-    if (state.type === 'p' && T > 0 && nH > 0) nE = Math.max(2, nE);
+    // doped material rises more steeply above 1e13 cm^-3 so that changing the doping is obvious
+    const count = state.type === 'i' ? toCount : dopCount;
+    let nE = count(n), nH = count(p);
+    // Pair display is not to scale: up to 4 eV at least one pair stays visible (so a 1.5 eV semiconductor at 300 K
+    // is not mistaken for an insulator) and the minimum thins out slowly with the gap; above 4 eV nothing is drawn.
+    const pairsPossible = Eg <= 4;
+    if (state.type === 'i'){
+      if (!pairsPossible){ nE = nH = 0; }
+      else if (T >= 250){
+        const w = clamp((T - 250) / 50, 0, 1);                    // ramps in from 250 K (1 pair) to 300 K
+        const taper = 1 + 6 * clamp((4 - Eg) / 2.9, 0, 1);        // about 7 pairs at 1.1 eV down to 1 pair at 4 eV
+        const floor = Math.max(1, Math.round(1 + (taper - 1) * w));
+        nE = Math.max(nE, floor); nH = Math.max(nH, floor);
+      }
+    } else if (state.type === 'n'){
+      if (!pairsPossible) nH = 0; else if (T > 0 && nE > 0) nH = Math.max(2, nH); // minority holes
+    } else {
+      if (!pairsPossible) nE = 0; else if (T > 0 && nH > 0) nE = Math.max(2, nE); // minority electrons
+    }
     P = { Eg, T, kT, Ef, Nd, ni, n, p, nE, nH };
   }
 
@@ -174,12 +195,14 @@
     $('nOut').innerHTML = sci(P.n);
     $('pOut').innerHTML = sci(P.p);
     const doped = state.type !== 'i';
+    $('legDop').style.display = doped ? '' : 'none';
+    $('legDopText').innerHTML = state.type === 'n' ? 'donor level E<sub>d</sub>' : 'acceptor level E<sub>a</sub>';
     $('dopCtl').style.display = doped ? 'block' : 'none';
     if (doped){
       const n = state.type === 'n';
       $('dopLabel').innerHTML = n ? 'Donor concentration N<sub>d</sub>' : 'Acceptor concentration N<sub>a</sub>';
       $('dopVal').innerHTML = sci(P.Nd) + ' cm<sup>&minus;3</sup>';
-      $('dopHint').innerHTML = n ? '&uarr; E<sub>F</sub> rises' : '&darr; E<sub>F</sub> falls';
+      $('dopHint').innerHTML = !$('showEf').checked ? '' : n ? '&uarr; E<sub>F</sub> rises' : '&darr; E<sub>F</sub> falls';
     }
   }
 
@@ -223,7 +246,8 @@
     parts.push(mk('h', x, 'fadein', 0.6));
     flashes.push({ x, E: 0, t: 0, col: '255,209,102' });
   }
-  const isMajority = (kind) => (state.type === 'n' && kind === 'e') || (state.type === 'p' && kind === 'h');
+  const dopE = () => state.type === 'n' ? P.Eg - E_B : E_B; // donor level Ed (n-type) or acceptor level Ea (p-type)
+  const isMajority =(kind) => (state.type === 'n' && kind === 'e') || (state.type === 'p' && kind === 'h');
   // Doped material: extra majority carriers come from the dopant level (near EF) instead of across the gap
   function spawnSingle(kind){
     const x = rnd(xMin(), xMax());
@@ -309,10 +333,10 @@
     const s = p.dur ? clamp(p.t / p.dur, 0, 1) : 1;
     switch (p.state){
       case 'spawn': {
-        const E0 = p.fromEf ? P.Ef : 0;
+        const E0 = p.fromEf ? dopE() : 0;
         return { x: p.x, E: E0 + (liveE(p) - E0) * (1 - Math.pow(1 - s, 3)), a: 1, s };
       }
-      case 'return': return { x: p.x, E: p.E0 + (P.Ef - p.E0) * s * s, a: s < 0.75 ? 1 : (1 - s) / 0.25, s };
+      case 'return': return { x: p.x, E: p.E0 + (dopE() - p.E0) * s * s, a: s < 0.75 ? 1 : (1 - s) / 0.25, s };
       case 'fadein': return { x: p.x, E: liveE(p), a: s, s };
       case 'fadeout': return { x: p.x, E: liveE(p), a: 1 - s, s };
       case 'recomb': {
@@ -390,39 +414,58 @@
     // band labels
     ctx.font = '12px ' + font;
     ctx.fillStyle = 'rgba(169,183,208,0.85)';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText('Conduction band', pad.l + pw - 8, Y(yhi) + 8);
+    ctx.fillText('Conduction band', pad.l + 8, Y(yhi) + 8);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Valence band', pad.l + 8, Y(ylo) - 8);
 
-    // Ec and Ev
+    // Ec, Ev, EF and (doped) the donor / acceptor level: lines first, then right-margin labels
+    const doped = state.type !== 'i';
+    const Ed = doped ? dopE() : 0;
     ctx.strokeStyle = '#ffb454';
-    ctx.fillStyle = '#ffb454';
     ctx.lineWidth = 2;
+    for (const e of [Ec, Ev]){
+      ctx.beginPath(); ctx.moveTo(pad.l, Y(e)); ctx.lineTo(pad.l + pw, Y(e)); ctx.stroke();
+    }
+    const showEf = $('showEf').checked;
+    ctx.strokeStyle = '#7ee787';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([7, 4]);
+    if (showEf){ ctx.beginPath(); ctx.moveTo(pad.l, Y(Ef)); ctx.lineTo(pad.l + pw, Y(Ef)); ctx.stroke(); }
+    if (doped){
+      ctx.strokeStyle = '#c792ea';
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(pad.l, Y(Ed)); ctx.lineTo(pad.l + pw, Y(Ed)); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    const labels = [
+      { y: Y(Ec), text: 'Ec = ' + Ec.toFixed(2), col: '#ffb454' },
+      { y: Y(Ev), text: 'Ev = ' + Ev.toFixed(2), col: '#ffb454' }
+    ];
+    if (showEf) labels.push({ y: Y(Ef), text: 'EF = ' + Ef.toFixed(2), col: '#7ee787' });
+    if (doped) labels.push({ y: Y(Ed), text: (state.type === 'n' ? 'Ed' : 'Ea') + ' = ' + Ed.toFixed(2), col: '#c792ea' });
+    labels.sort((a, b) => a.y - b.y);
+    for (let it = 0; it < 30; it++){ // push neighbouring labels apart until none overlap
+      let moved = false;
+      for (let i = 1; i < labels.length; i++){
+        const gap = labels[i].y - labels[i - 1].y;
+        if (gap < 13){ const d = (13 - gap) / 2; labels[i - 1].y -= d; labels[i].y += d; moved = true; }
+      }
+      if (!moved) break;
+    }
     ctx.font = 'bold 12px ' + font;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    for (const [name, e] of [['Ec', Ec], ['Ev', Ev]]){
-      ctx.beginPath(); ctx.moveTo(pad.l, Y(e)); ctx.lineTo(pad.l + pw, Y(e)); ctx.stroke();
-      ctx.fillText(name + ' = ' + e.toFixed(2), pad.l + pw + 8, Y(e));
-    }
-
-    // Fermi level
-    ctx.strokeStyle = '#7ee787';
-    ctx.fillStyle = '#7ee787';
-    ctx.lineWidth = 1.6;
-    ctx.setLineDash([7, 4]);
-    ctx.beginPath(); ctx.moveTo(pad.l, Y(Ef)); ctx.lineTo(pad.l + pw, Y(Ef)); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillText('EF = ' + Ef.toFixed(2), pad.l + pw + 8, Y(Ef));
+    for (const l of labels){ ctx.fillStyle = l.col; ctx.fillText(l.text, pad.l + pw + 8, l.y); }
 
     // generation lines, carriers, flashes
     for (const p of parts){
       const q = posOf(p);
       if (p.state === 'spawn' || p.state === 'return'){
-        const from = p.state === 'return' ? p.E0 : (p.fromEf ? P.Ef : 0);
+        const from = p.state === 'return' ? p.E0 : (p.fromEf ? dopE() : 0);
         const fade = p.state === 'spawn' ? 1 - q.s : 0.5 * q.a;
         ctx.strokeStyle = (p.fromEf || p.state === 'return' ? 'rgba(126,231,135,' : 'rgba(255,209,102,') + (0.85 * fade) + ')';
         ctx.lineWidth = 1.5;
@@ -440,7 +483,7 @@
       const s = f.t / 0.5;
       ctx.strokeStyle = 'rgba(' + f.col + ',' + (1 - s) + ')';
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(f.x, Y(f.ef ? P.Ef : f.E), 5 + 16 * s, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(f.x, Y(f.ef ? dopE() : f.E), 5 + 16 * s, 0, Math.PI * 2); ctx.stroke();
     }
 
     // axis titles
@@ -483,12 +526,16 @@
     Object.assign(state, DEFAULTS);
     document.querySelector('input[name="dtype"][value="i"]').checked = true;
     $('showRecomb').checked = false;
+    $('showEf').checked = false;
+    syncEf();
     $('dop').value = state.logN;
     for (const [key, nid] of [['Eg', 'EgNum'], ['T', 'TNum']]){
       $(key).value = $(nid).value = state[key];
     }
     changed();
   });
+  const syncEf = () => { $('legEf').style.display = $('showEf').checked ? '' : 'none'; updateUI(); };
+  $('showEf').addEventListener('change', syncEf);
   window.addEventListener('resize', resize);
 
   changed();
