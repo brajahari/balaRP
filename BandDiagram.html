@@ -31,6 +31,7 @@
     .seg input { position:absolute; opacity:0; pointer-events:none; }
     .seg span { display:block; text-align:center; padding:8px 6px; border:1px solid #d0d5db; border-radius:10px; font-size:12px; font-weight:600; color:#6c757d; background:#ffffff; }
     .seg input:checked + span { background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-color:transparent; color:#ffffff; }
+    .seg input:disabled + span { opacity:0.4; cursor:not-allowed; }
     .seg input:focus-visible + span { box-shadow:0 0 0 3px rgba(102,126,234,0.25); }
     .kpi { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
     .kpi .box { background:#f0f0f0; border:1px solid #e0e6ed; border-radius:12px; padding:9px; }
@@ -43,11 +44,19 @@
     .legend { display:flex; flex-wrap:wrap; gap:14px; padding:6px 12px 10px; color:var(--muted); font-size:12px; align-items:center; }
     .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; box-sizing:border-box; }
     .status { padding:12px 14px 2px; color:var(--muted); font-size:12px; line-height:1.5; }
+  
+    .titlebar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; margin-bottom:14px; }
+    .titlebar > h1 { margin:0; }
+    .back { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:10px; background:#ffffff; border:1.5px solid #667eea; color:#667eea; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; }
+    .back:hover { background:#eef0fd; }
   </style>
 </head>
 <body>
 <div class="page">
-  <h1>Band Diagram &amp; Thermal Carrier Generation</h1>
+  <div class="titlebar">
+    <a class="back" href="index.html" title="Back to Simulators"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>Home</a>
+    <h1>Band Diagram &amp; Thermal Carrier Generation</h1>
+  </div>
 
   <div class="wrap">
     <section class="card controls">
@@ -60,8 +69,9 @@
 
       <div class="group-title">Material</div>
       <div class="ctl">
-        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0" max="5" step="0.01" value="1.1" /></div>
-        <input id="Eg" type="range" min="0" max="5" step="0.01" value="1.1" />      </div>
+        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="-0.1" max="5" step="0.01" value="1.1" /></div>
+        <input id="Eg" type="range" min="-0.1" max="5" step="0.01" value="1.1" />
+        <div class="tmark"><span id="zeroMark" style="left:calc(1.961% + 8px - 0.314px);" title="Eg = 0 eV (click to set)">&#9650;<br>0</span><span id="siMark" style="left:calc(23.529% + 8px - 3.765px);" title="Silicon, Eg = 1.1 eV (click to set)">&#9650;<br>Si</span></div>      </div>
       <div class="seg">
         <label><input type="radio" name="dtype" value="i" checked /><span>Intrinsic</span></label>
         <label><input type="radio" name="dtype" value="n" /><span>n-type</span></label>
@@ -121,7 +131,7 @@
 
   // Fermi level from charge neutrality (same model as FermiDirac.html)
   const K300 = K_B * 300;
-  const N0 = 1e19; // cm^-3 at 300 K
+  const N0 = 1.736e19; // cm^-3 at 300 K (calibrated so ni(Si, 1.1 eV, 300 K) = 1.0x10^10)
   function fermiLevel(Eg, T, type, Nd){
     if (type === 'i') return { Ef: Eg / 2, Nd: null };
     const lnNd = Math.log(Nd);
@@ -146,11 +156,12 @@
   let P = {};
 
   function compute(){
-    const Eg = clamp(state.Eg, 0, 5);
+    const Eg = clamp(state.Eg, -0.1, 5); // Eg <= 0: touching / overlapping bands (metal)
     const T = Math.max(0, state.T);
     const kT = K_B * T;
     const { Ef, Nd } = fermiLevel(Eg, T, state.type, Math.pow(10, state.logN));
-    const ni = T > 0 ? Math.exp(Math.log(N0) + 1.5 * Math.log(T / 300) - Eg / (2 * kT)) : 0;
+    // metal (bands touch or overlap): free electrons and holes exist even at 0 K, independent of T
+    const ni = Eg <= 0 ? N0 : T > 0 ? Math.exp(Math.log(N0) + 1.5 * Math.log(T / 300) - Eg / (2 * kT)) : 0;
     let n = ni, p = ni;
     if (state.type !== 'i'){
       // dopants ionize with binding energy E_B: ionized fraction 1/(1 + 2 exp((E_F - E_d)/kT)) for donors (mirrored for acceptors)
@@ -163,13 +174,15 @@
     }
     // doped material rises more steeply above 1e13 cm^-3 so that changing the doping is obvious
     const count = state.type === 'i' ? toCount : dopCount;
+    // metal: free electrons only (no holes)
+    if (Eg <= 0) p = 0;
     let nE = count(n), nH = count(p);
     // Pair display is not to scale: up to 4 eV at least one pair stays visible (so a 1.5 eV semiconductor at 300 K
     // is not mistaken for an insulator) and the minimum thins out slowly with the gap; above 4 eV nothing is drawn.
     const pairsPossible = Eg <= 4;
     if (state.type === 'i'){
       if (!pairsPossible){ nE = nH = 0; }
-      else if (T >= 250){
+      else if (T >= 250 && Eg > 0){
         const w = clamp((T - 250) / 50, 0, 1);                    // ramps in from 250 K (1 pair) to 300 K
         const taper = 1 + 6 * clamp((4 - Eg) / 2.9, 0, 1);        // about 7 pairs at 1.1 eV down to 1 pair at 4 eV
         const floor = Math.max(1, Math.round(1 + (taper - 1) * w));
@@ -191,7 +204,7 @@
 
   function updateUI(){
     $('kTOut').textContent = (P.kT * 1000).toFixed(2) + ' meV';
-    $('niOut').innerHTML = sci(P.ni);
+    $('niOut').innerHTML = P.Eg <= 0 ? '&mdash;' : sci(P.ni);
     $('nOut').innerHTML = sci(P.n);
     $('pOut').innerHTML = sci(P.p);
     const doped = state.type !== 'i';
@@ -206,7 +219,16 @@
     }
   }
 
-  function changed(){ compute(); updateUI(); }
+  function changed(){
+    // doping does not apply to a metal: fall back to intrinsic and disable n-type / p-type
+    const metal = state.Eg <= 0;
+    document.querySelectorAll('input[name="dtype"]').forEach((r) => { if (r.value !== 'i') r.disabled = metal; });
+    if (metal && state.type !== 'i'){
+      state.type = 'i';
+      document.querySelector('input[name="dtype"][value="i"]').checked = true;
+    }
+    compute(); updateUI();
+  }
 
   function bind(key, rid, nid){
     const r = $(rid), n = $(nid);
@@ -383,7 +405,7 @@
   function draw(time){
     if (!ctx || !W || !H) return;
     const { Eg, Ef } = P;
-    const Ec = Eg, Ev = 0, ylo = -0.5, yhi = Eg + 0.5;
+    const Ec = Eg, Ev = 0, ylo = Math.min(0, Eg) - 0.5, yhi = Math.max(0, Eg) + 0.5;
     const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
     const Y = (e) => pad.t + (yhi - e) / (yhi - ylo) * ph;
     const font = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
@@ -420,6 +442,12 @@
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Valence band', pad.l + 8, Y(ylo) - 8);
+    if (Eg < 0){
+      ctx.fillStyle = 'rgba(255,209,102,0.9)';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('bands overlap', pad.l + pw - 8, Y(0) - 6);
+    }
 
     // Ec, Ev, EF and (doped) the donor / acceptor level: lines first, then right-margin labels
     const doped = state.type !== 'i';
@@ -512,12 +540,18 @@
   // ---- wiring ---------------------------------------------------------------
   bind('Eg', 'Eg', 'EgNum');
   bind('T', 'T', 'TNum');
+  $('zeroMark').addEventListener('click', () => { state.Eg = 0; $('Eg').value = $('EgNum').value = 0; changed(); });
+  $('siMark').addEventListener('click', () => { state.Eg = 1.1; $('Eg').value = $('EgNum').value = 1.1; changed(); });
   $('t300').addEventListener('click', () => { state.T = 300; $('T').value = $('TNum').value = 300; changed(); });
   $('dop').addEventListener('input', () => { state.logN = parseFloat($('dop').value); changed(); });
   document.querySelectorAll('input[name="dtype"]').forEach((r) => {
     r.addEventListener('click', () => {
+      // every click on Intrinsic / n-type / p-type puts the sliders back to their defaults
       state.type = r.value;
-      state.logN = DEFAULTS.logN; // every click on n-type / p-type resets the doping to the minimum
+      Object.assign(state, { Eg: DEFAULTS.Eg, T: DEFAULTS.T, logN: DEFAULTS.logN });
+      for (const [key, nid] of [['Eg', 'EgNum'], ['T', 'TNum']]){
+        $(key).value = $(nid).value = state[key];
+      }
       $('dop').value = state.logN;
       changed();
     });
