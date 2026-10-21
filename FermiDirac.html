@@ -40,29 +40,42 @@
     /* Plot card: stays dark */
     .card.plot { background:var(--panel); border:1px solid #1f2a37; border-radius:12px; padding:10px; }
     canvas { width:100%; height:460px; display:block; border-radius:10px; background:#0a111b; border:1px solid #1f2a37; }
+    .plotrow { display:flex; align-items:flex-start; gap:8px; }
+    .card.plot { min-width:0; }
+    .card.plot .legend { padding-left:0; }
+    .legend .probein { display:flex; align-items:center; gap:8px; margin:0 12px 0 0; color:var(--probe); font-size:12px; font-weight:600; }
+    .legend input[type=number] { width:50px; padding:5px 6px; border-radius:8px; border:1.5px solid var(--probe); background:#0e1420; color:var(--probe); font-size:14px; font-weight:700; text-align:center; -moz-appearance:textfield; appearance:textfield; }
+    .legend input[type=number]::-webkit-inner-spin-button, .legend input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+    .legend input[type=number]:focus { outline:none; box-shadow:0 0 0 3px rgba(255,209,102,0.25); }
+    .vwrap { position:relative; flex:0 0 46px; }
+    .efmark { position:absolute; left:17px; font-size:10.5px; font-weight:700; line-height:12px; color:#7ee787; white-space:nowrap; cursor:pointer; user-select:none; }
+    .plotrow canvas { flex:1 1 0; width:0; min-width:0; }
+    /* vertical probe-energy slider: minimum at the bottom, aligned with the plot's energy axis (see layoutVSlider) */
+    input[type=range].vslider { writing-mode:vertical-lr; direction:rtl; -webkit-appearance:none; appearance:none; width:16px; flex:0 0 16px; margin:0; padding:0; background:transparent; cursor:pointer; }
+    .vslider::-webkit-slider-runnable-track { width:4px; border-radius:2px; background:rgba(255,209,102,0.35); }
+    .vslider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:16px; height:16px; margin-left:-6px; border-radius:50%; background:#ffd166; border:2px solid rgba(0,0,0,0.6); box-sizing:border-box; }
+    .vslider::-moz-range-track { width:4px; border-radius:2px; background:rgba(255,209,102,0.35); }
+    .vslider::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:#ffd166; border:2px solid rgba(0,0,0,0.6); box-sizing:border-box; }
+    .vslider:focus-visible { outline:2px solid rgba(255,209,102,0.6); outline-offset:2px; border-radius:8px; }
     .legend { display:flex; flex-wrap:wrap; gap:14px; padding:6px 12px 10px; color:var(--muted); font-size:12px; }
     .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
     .status { padding:12px 14px 2px; color:var(--muted); font-size:12px; line-height:1.5; }
+  
+    .titlebar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; margin-bottom:14px; }
+    .titlebar > h1 { margin:0; }
+    .back { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:10px; background:#ffffff; border:1.5px solid #667eea; color:#667eea; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; }
+    .back:hover { background:#eef0fd; }
   </style>
 </head>
 <body>
 <div class="page">
-  <h1>Fermi-Dirac Distribution f(E)</h1>
+  <div class="titlebar">
+    <a class="back" href="index.html" title="Back to Simulators"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>Home</a>
+    <h1>Fermi-Dirac Distribution f(E)</h1>
+  </div>
 
   <div class="wrap">
     <section class="card controls">
-      <div class="group-title">Material</div>
-      <div class="ctl">
-        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0.2" max="3" step="0.01" value="1.1" /></div>
-        <input id="Eg" type="range" min="0.2" max="3" step="0.01" value="1.1" />
-      </div>
-      <div class="seg">
-        <label><input type="radio" name="dtype" value="i" checked /><span>Intrinsic</span></label>
-        <label><input type="radio" name="dtype" value="n" /><span>n-type</span></label>
-        <label><input type="radio" name="dtype" value="p" /><span>p-type</span></label>
-      </div>
-      <div id="EfNote" style="font-size:12px; color:#6c757d; margin-top:8px;">—</div>
-
       <div class="group-title">Temperature</div>
       <div class="ctl">
         <div class="ctl-head"><label for="T">Temperature T (K)</label><input id="TNum" type="number" min="0" max="1000" step="1" value="300" /></div>
@@ -70,10 +83,16 @@
         <div class="tmark"><span id="t300" title="Room temperature (click to set T = 300 K)">&#9650;<br>300 K</span></div>
       </div>
 
-      <div class="group-title">Energy</div>
+      <div class="group-title">Material</div>
       <div class="ctl">
-        <div class="ctl-head"><label for="E">Energy E (eV)</label><input id="ENum" type="number" min="-0.6" max="1.72" step="0.005" value="0.6" /></div>
-        <input id="E" type="range" min="-0.6" max="1.72" step="0.005" value="0.6" />
+        <div class="ctl-head"><label for="Eg">Band gap E<sub>g</sub> = E<sub>c</sub> &minus; E<sub>v</sub> (eV)</label><input id="EgNum" type="number" min="0.2" max="3" step="0.01" value="1.1" /></div>
+        <input id="Eg" type="range" min="0.2" max="3" step="0.01" value="1.1" />
+        <div class="tmark"><span id="siMark" style="left:calc(32.143% + 8px - 5.143px);" title="Silicon, Eg = 1.1 eV (click to set)">&#9650;<br>Si</span></div>
+      </div>
+      <div class="seg">
+        <label><input type="radio" name="dtype" value="i" checked /><span>Intrinsic</span></label>
+        <label><input type="radio" name="dtype" value="n" /><span>n-type</span></label>
+        <label><input type="radio" name="dtype" value="p" /><span>p-type</span></label>
       </div>
 
       <div class="kpi">
@@ -88,12 +107,19 @@
 
     <section class="card plot">
       <div class="legend">
+        <label class="probein"><input id="ENum" type="number" min="-0.6" max="1.72" step="0.01" value="0.55" title="Probe energy" /> eV</label>
         <span><span class="dot" style="background:var(--accent)"></span>f(E)</span>
         <span><span class="dot" style="background:var(--accent2)"></span>E<sub>F</sub></span>
         <span><span class="dot" style="background:var(--band)"></span>E<sub>c</sub> / E<sub>v</sub></span>
         <span><span class="dot" style="background:var(--probe)"></span>probe E</span>
       </div>
-      <canvas id="plot"></canvas>
+      <div class="plotrow">
+        <div class="vwrap">
+          <input id="E" class="vslider" type="range" min="-0.6" max="1.72" step="0.01" value="0.55" title="Probe energy (drag up / down)" aria-label="Probe energy" />
+          <div id="efMark" class="efmark" title="Fermi level (click to set the probe energy = E_F)">&#9664; E<sub>F</sub></div>
+        </div>
+        <canvas id="plot"></canvas>
+      </div>
       <div class="status">
         f(E) = 1 / (1 + e<sup>(E &minus; E<sub>F</sub>) / kT</sup>) &nbsp;|&nbsp; k = 8.617&times;10<sup>&minus;5</sup> eV/K &nbsp;|&nbsp; E<sub>v</sub> is taken as 0 eV, so E<sub>c</sub> = E<sub>g</sub>.
       </div>
@@ -103,7 +129,7 @@
 
 <script>
   const K_B = 8.617333262e-5; // eV/K
-  const DEFAULTS = { Eg: 1.1, T: 300, E: 0.6, type: 'i' };
+  const DEFAULTS = { Eg: 1.1, T: 300, E: 0.55, type: 'i' };
   const DOPING_OFFSET = 0.2; // eV: EF sits this far below Ec (n-type) or above Ev (p-type)
   const state = { ...DEFAULTS };
   const $ = (id) => document.getElementById(id);
@@ -160,7 +186,8 @@
       r.min = n.min = lo;
       r.max = n.max = hi;
       state[key] = clamp(state[key], lo, hi);
-      r.value = n.value = state[key];
+      r.value = state[key];
+      n.value = state[key].toFixed(2);
     }
   }
 
@@ -168,7 +195,7 @@
     const r = $(rid), n = $(nid);
     r.addEventListener('input', () => {
       state[key] = parseFloat(r.value);
-      n.value = r.value;
+      n.value = key === 'E' ? state[key].toFixed(2) : r.value;
       if (afterChange) afterChange();
       update();
     });
@@ -184,23 +211,45 @@
 
   function setupCanvas(canvas){
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    const w = canvas.clientWidth, h = canvas.clientHeight; // excludes the border, so drawing is 1:1
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { ctx, w: rect.width, h: rect.height };
+    return { ctx, w, h };
+  }
+
+  const PAD = { l: 64, r: 88, t: 16, b: 48 };
+  // horizontally centre the vertical slider under the probe-energy box (widens its column so the E_F marker still fits)
+  function layoutVSliderX(){
+    const s = $('E'), vw = s.parentElement;
+    const nb = $('ENum').getBoundingClientRect(), vr = vw.getBoundingClientRect();
+    const left = Math.max(0, nb.left + nb.width / 2 - vr.left - 8);
+    s.style.marginLeft = left + 'px';
+    $('efMark').style.left = (left + 18) + 'px';
+    vw.style.flex = '0 0 ' + Math.ceil(left + 18 + 34) + 'px';
+  }
+  // line the vertical slider up with the plot's energy axis: thumb centre == Y(E)
+  // and put the E_F marker at Y(EF) beside the slider track
+  function layoutVSlider(ef, ylo, yhi){
+    const canvas = $('plot'), s = $('E');
+    const ph = canvas.clientHeight - PAD.t - PAD.b;
+    s.style.height = (ph + 16) + 'px';
+    s.style.marginTop = (canvas.clientTop + PAD.t - 8) + 'px';
+    $('efMark').style.top = (canvas.clientTop + PAD.t + (yhi - ef) / (yhi - ylo) * ph - 6) + 'px';
   }
 
   function draw(){
     const { Eg, Ef, T, E } = params();
+    layoutVSliderX(); // before sizing the canvas, because it changes the canvas width
     const { ctx, w, h } = setupCanvas($('plot'));
     if (!w || !h) return;
     ctx.clearRect(0, 0, w, h);
 
     const Ec = Eg, Ev = 0;
     const ylo = -0.6, yhi = Eg + 0.6;
-    const pad = { l: 64, r: 88, t: 16, b: 48 };
+    const pad = PAD;
+    layoutVSlider(Ef, ylo, yhi);
     const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
     const X = (f) => pad.l + f * pw;
     const Y = (e) => pad.t + (yhi - e) / (yhi - ylo) * ph;
@@ -242,9 +291,9 @@
     // band labels
     ctx.font = '12px ' + font;
     ctx.fillStyle = 'rgba(169,183,208,0.85)';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText('Conduction band', pad.l + pw - 8, Y(yhi) + 8);
+    ctx.fillText('Conduction band', pad.l + 8, Y(yhi) + 8);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Valence band', pad.l + 8, Y(ylo) - 8);
@@ -346,14 +395,7 @@
   }
 
   function update(){
-    const { Eg, Ef, Nd, T, E } = params();
-    const dop = () => { const [m, e] = Nd.toExponential(1).split('e'); return m + '&times;10<sup>' + parseInt(e, 10) + '</sup> cm<sup>&minus;3</sup>'; };
-    const notes = {
-      i: 'Intrinsic: E<sub>F</sub> = E<sub>g</sub>/2 (midgap)',
-      n: 'n-type, N<sub>d</sub> = ' + (Nd ? dop() : ''),
-      p: 'p-type, N<sub>a</sub> = ' + (Nd ? dop() : '')
-    };
-    $('EfNote').innerHTML = notes[state.type] + (state.type === 'i' ? '' : '<br>Doping is set so E<sub>F</sub> is ' + DOPING_OFFSET + ' eV from ' + (state.type === 'n' ? 'E<sub>c</sub>' : 'E<sub>v</sub>') + ' at 300 K; it moves toward midgap as T rises.') + '<br>E<sub>F</sub> now = ' + Ef.toFixed(3) + ' eV';
+    const { Eg, Ef, T, E } = params();
     $('kTOut').textContent = (K_B * T * 1000).toFixed(2) + ' meV';
     $('fOut').textContent = fp(fermi(E, Ef, T));
     $('fcOut').textContent = fp(fermi(Eg, Ef, T));
@@ -363,11 +405,32 @@
 
   bind('Eg', 'Eg', 'EgNum', setBounds);
   bind('T', 'T', 'TNum');
+  // put the probe energy exactly on the Fermi level (default for load / Reset / type buttons, and the EF marker click)
+  function probeToEf(){
+    state.E = clamp(params().Ef, parseFloat($('E').min), parseFloat($('E').max));
+    $('E').value = state.E;
+    $('ENum').value = state.E.toFixed(2);
+  }
+  $('efMark').addEventListener('click', () => {
+    probeToEf();
+    update();
+  });
+  $('siMark').addEventListener('click', () => { state.Eg = 1.1; $('Eg').value = $('EgNum').value = 1.1; setBounds(); update(); });
   $('t300').addEventListener('click', () => { state.T = 300; $('T').value = $('TNum').value = 300; update(); });
   bind('E', 'E', 'ENum');
 
   document.querySelectorAll('input[name="dtype"]').forEach((r) => {
-    r.addEventListener('change', () => { state.type = r.value; update(); });
+    r.addEventListener('click', () => {
+      // every click on Intrinsic / n-type / p-type puts the sliders back to their defaults
+      state.type = r.value;
+      Object.assign(state, { Eg: DEFAULTS.Eg, T: DEFAULTS.T, E: DEFAULTS.E });
+      for (const [key, nid] of [['Eg', 'EgNum'], ['T', 'TNum']]){
+        $(key).value = $(nid).value = state[key];
+      }
+      setBounds();
+      probeToEf();
+      update();
+    });
   });
 
   $('resetBtn').addEventListener('click', () => {
@@ -377,11 +440,13 @@
       $(key).value = $(nid).value = state[key];
     }
     setBounds();
+    probeToEf();
     update();
   });
 
   window.addEventListener('resize', update);
   setBounds();
+  probeToEf();
   update();
 </script>
 </body>

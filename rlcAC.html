@@ -79,11 +79,19 @@
       color:#6c757d;
       margin-left:8px;
     }
+  
+    .titlebar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-bottom:12px;}
+    .titlebar > h1{margin:0;}
+    .back{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:10px;background:#ffffff;border:1.5px solid #667eea;color:#667eea;font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;}
+    .back:hover{background:#eef0fd;}
   </style>
 </head>
 <body>
 <main>
-  <h1>Series RLC AC Simulator</h1>
+  <div class="titlebar">
+    <a class="back" href="index.html" title="Back to Simulators"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>Home</a>
+    <h1>Series RLC AC Simulator</h1>
+  </div>
   <div class="sub"></div>
 
   <div class="grid">
